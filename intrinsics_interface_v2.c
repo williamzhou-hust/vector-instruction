@@ -1,12 +1,14 @@
 // XLZL.cpp : Defines the entry point for the console application.
 //
 #include <immintrin.h>//main header
+#include <emmintrin.h>//__m128i
 #include <time.h>
 #include <memory.h>
 #include <stdio.h>
 #include<stdlib.h>
 
 #define _MM_ALIGN32 __attribute__ ((aligned (32)))
+
 typedef short int16;
 typedef int int32;
 struct shortcomplex{
@@ -46,6 +48,63 @@ complex32 reduceForComplex32(complex32 ra, complex32 rb){
 	//ans.imag=ra.imag-rb.imag;
 	return ans;
 }
+
+//Matrix_Mult for 4x4
+void multForMatrix(complex32 (*h)[4],complex32* x,complex32* dest){
+	int i=0,j=0;
+	for(j=0;j<4;j++){
+		complex32 temp={0,0};
+		for(i=0;i<4;i++){
+			temp=addForComplex32(temp,multForComplex32(h[i][j],x[i]));
+		}
+		dest[j].real=temp.real;
+		dest[j].imag=temp.imag;
+	}
+}
+
+//Matrix_Mult for 4x4 use avx2
+//make sure dest's data equal 0
+void Matrix_Mult_AVX2(complex32 (*h)[4],complex32* x,complex32* dest){
+	complex32 a[16]={h[0][0],h[1][0],h[2][0],h[3][0],
+					 h[0][1],h[1][1],h[2][1],h[3][1],
+					 h[0][2],h[1][2],h[2][2],h[3][2],
+					 h[0][3],h[1][3],h[2][3],h[3][3]};
+	complex32 b[16]={x[0],x[1],x[2],x[3],
+					 x[0],x[1],x[2],x[3],
+					 x[0],x[1],x[2],x[3],
+					 x[0],x[1],x[2],x[3]};
+	complex32 c[16]={{0,0}};
+	void Mult_complex32Vector_2(complex32* a, complex32* b, complex32* dest /*int lengthOfVector = 16*/);
+	Mult_complex32Vector_2(a,b,c);
+	complex32 temp[4] _MM_ALIGN32 = {{0,0},{0,0},{0,0},{0,0}};
+	int16 c1[8] _MM_ALIGN32 = {c[0].real,c[0].imag,c[4].real,c[4].imag,c[8].real,c[8].imag,c[12].real,c[12].imag};
+	int16 c2[8] _MM_ALIGN32 = {c[1].real,c[1].imag,c[5].real,c[5].imag,c[9].real,c[9].imag,c[13].real,c[13].imag}; 
+	int16 c3[8] _MM_ALIGN32 = {c[2].real,c[2].imag,c[6].real,c[6].imag,c[10].real,c[10].imag,c[14].real,c[14].imag}; 
+	int16 c4[8] _MM_ALIGN32 = {c[3].real,c[3].imag,c[7].real,c[7].imag,c[11].real,c[11].imag,c[15].real,c[15].imag}; 
+	/*int i=0,j=0;
+	for(i=0;i<4;i++){
+		for(j=0;j<4;j++){
+			temp[i]=addForComplex32(temp[i],c[i*4+j]);
+		}
+	dest[i].real=temp[i].real;
+	dest[i].imag=temp[i].imag;
+	}*/
+	//__m128i _mm_load_si128 (__m128i const* mem_addr)
+	//__m128i _mm_add_epi16 (__m128i a, __m128i b)
+	__m128i temp1,temp2,temp3,temp4;
+	temp1=_mm_load_si128((__m128i*)c1);
+	temp2=_mm_load_si128((__m128i*)c2);
+	temp3=_mm_load_si128((__m128i*)c3);
+	temp4=_mm_load_si128((__m128i*)c4);
+	temp1=_mm_add_epi16(temp1,temp2);
+	temp1=_mm_add_epi16(temp1,temp3);
+	temp1=_mm_add_epi16(temp1,temp4);
+	//_mm_store_si128 (__m128i* mem_addr, __m128i a)
+	_mm_store_si128((__m128i*)temp,temp1);
+	memcpy(dest,&temp,16);
+	return;
+}
+
 //#pragma pack(4)
 void Mult_complex32Vector(complex32* a, complex32* b, complex32* dest /*int lengthOfVector = 8*/){
     float a_real_v[8] _MM_ALIGN32 = { a[0].real, a[1].real, a[2].real, a[3].real, a[4].real, a[5].real, a[6].real, a[7].real };
@@ -330,6 +389,7 @@ void And_Vector_2(unsigned char* a, unsigned char* b, unsigned char* dest /*int 
 
 #define NUMBER 16
 #define NUMBER_2 32
+#define Matrix_H 4
 int main(int argc, char* argv[]){
 	/*printf("test for add:\n");
 	test_256_float_add();
@@ -450,5 +510,48 @@ int main(int argc, char* argv[]){
 	printf("The mult answer:\n");
 	for (i = 0; i < NUMBER / 2; i++) printf("%d %d\n", c_2[i].real, c_2[i].imag);
 	*/	
+	
+	//Matrix_Mult
+	complex32 h[4][4];
+	complex32 x[4];
+	complex32* x_dest = (complex32*)malloc(Matrix_H * sizeof(complex32));
+	memset(x_dest,0,4*sizeof(complex32));
+	srand((unsigned)time(NULL));
+	for(i=0;i<Matrix_H;i++){
+		for (j = 0; j < Matrix_H; j++){
+			h[i][j].real = (double)(rand() / (double)RAND_MAX) * (0x1 << 13);
+			h[i][j].imag = (double)(rand() / (double)RAND_MAX) * (0x1 << 13);
+		}
+		x[i].real = (double)(rand() / (double)RAND_MAX) * (0x1 << 13);
+		x[i].imag = (double)(rand() / (double)RAND_MAX) * (0x1 << 13);
+	}
+	
+	//Matrix mult __m256i
+	//normal function
+	printf("Normal function: Matrix mult\n");
+	start_time = clock();
+	for (times = 0; times < 10000000;times++)
+		multForMatrix(h,x,x_dest);
+	end_time = clock();
+	printf("pall times = %fs\n", (double)(end_time - start_time) / CLOCKS_PER_SEC);
+	printf("The matrix mult answer:\n");
+	for (i = 0; i < Matrix_H; i++) printf("%d %d\n", x_dest[i].real, x_dest[i].imag);
+	printf("use AVX function: mult Matrix\n");
+	//using AVX
+	start_time = clock();
+	for (times = 0; times < 10000000; times++)
+	//Mult_complex32Vector(a, b, c);
+		Matrix_Mult_AVX2(h,x,x_dest);
+	end_time = clock();
+	printf("pall times = %fs\n", (double)(end_time - start_time) / CLOCKS_PER_SEC);
+	printf("The matrix mult answer:\n");
+	for (i = 0; i < Matrix_H; i++) printf("%d %d\n", x_dest[i].real, x_dest[i].imag);
+	
+	//free data
+	free(a);
+	free(b);
+	free(c);
+	
+	//return to main
 	return 0;
 }
