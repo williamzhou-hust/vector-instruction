@@ -50,7 +50,7 @@ complex32 reduceForComplex32(complex32 ra, complex32 rb){
 }
 
 //Matrix_Mult for 4x4
-void multForMatrix(complex32 (*h)[4],complex32* x,complex32* dest){
+void multForMatrix_4(complex32 (*h)[4],complex32* x,complex32* dest){
 	int i=0,j=0;
 	for(j=0;j<4;j++){
 		complex32 temp={0,0};
@@ -64,7 +64,7 @@ void multForMatrix(complex32 (*h)[4],complex32* x,complex32* dest){
 
 //Matrix_Mult for 4x4 use avx2
 //make sure dest's data equal 0
-void Matrix_Mult_AVX2(complex32 (*h)[4],complex32* x,complex32* dest){
+void Mult_Matrix_AVX2_4(complex32 (*h)[4],complex32* x,complex32* dest){
 	complex32 a[16]={h[0][0],h[1][0],h[2][0],h[3][0],
 					 h[0][1],h[1][1],h[2][1],h[3][1],
 					 h[0][2],h[1][2],h[2][2],h[3][2],
@@ -531,7 +531,7 @@ int main(int argc, char* argv[]){
 	printf("Normal function: Matrix mult\n");
 	start_time = clock();
 	for (times = 0; times < 10000000;times++)
-		multForMatrix(h,x,x_dest);
+		multForMatrix_4(h,x,x_dest);
 	end_time = clock();
 	printf("pall times = %fs\n", (double)(end_time - start_time) / CLOCKS_PER_SEC);
 	printf("The matrix mult answer:\n");
@@ -541,7 +541,7 @@ int main(int argc, char* argv[]){
 	start_time = clock();
 	for (times = 0; times < 10000000; times++)
 	//Mult_complex32Vector(a, b, c);
-		Matrix_Mult_AVX2(h,x,x_dest);
+		Mult_Matrix_AVX2_4(h,x,x_dest);
 	end_time = clock();
 	printf("pall times = %fs\n", (double)(end_time - start_time) / CLOCKS_PER_SEC);
 	printf("The matrix mult answer:\n");
